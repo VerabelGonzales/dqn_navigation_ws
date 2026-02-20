@@ -307,18 +307,16 @@ ros2 run dqn_robot_nav test_node --ros-args \
 | `max_steps` | 1500 | Límite de pasos por episodio |
 | `stage` | 2 | Stage del mundo Gazebo |
 
-Salida de ejemplo:
+Salida (Datos optenidos del test realizado):
 ```
-[INFO] ✓ Ep 1: GOAL      | steps=312 | reward=187.4 | dist_final=0.14m
-[INFO] ✗ Ep 2: COLLISION  | steps=88  | reward=-31.2 | dist_final=0.21m
 [INFO] ====================================================
 [INFO] === RESULTADOS DE EVALUACIÓN ========================
 [INFO]   Episodios    : 10
-[INFO]   ✓ Éxitos     : 5  (50.0%)
-[INFO]   ✗ Colisiones : 4  (40.0%)
+[INFO]   ✓ Éxitos     : 9  (90.0%)
+[INFO]   ✗ Colisiones : 0  (0.0%)
 [INFO]   ⏱ Timeouts   : 1  (10.0%)
-[INFO]   Reward medio : 124.31
-[INFO]   Reward std   : 89.47
+[INFO]   Reward medio : 539.17
+[INFO]   Reward std   : 193.27
 ```
 
 #### 5. Monitorear tópicos (opcional)
