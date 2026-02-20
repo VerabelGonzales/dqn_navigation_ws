@@ -332,13 +332,13 @@ ros2 topic echo /odom           # odometría del robot
 
 ---
 
-### Videos de Demostracion
+## Videos de Demostracion
 
-#### Train, velocidad x16
+### Train, velocidad x16
 
 [![Ver Video](https://github.com/VerabelGonzales/dqn_navigation_ws/blob/main/models/results_20260219_180800/miniatura.jpg)](https://www.youtube.com/watch?v=WpRYxxFKkw0)
 
 
-#### Test
+### Test, velocidad x1 
 
 [![Ver Video](https://github.com/VerabelGonzales/dqn_navigation_ws/blob/main/models/results_20260219_180800/miniatura.jpg)](https://www.youtube.com/watch?v=WpRYxxFKkw0)
