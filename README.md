@@ -336,9 +336,9 @@ ros2 topic echo /odom           # odometría del robot
 
 #### Train, velocidad x16
 
-[![Ver Video]](https://www.youtube.com/watch?v=WpRYxxFKkw0)
+[![Ver Video](https://emanual.robotis.com/docs/en/platform/turtlebot3/machine_learning/)](https://www.youtube.com/watch?v=WpRYxxFKkw0)
 
 
 #### Test
 
-[![Ver Video]](https://www.youtube.com/watch?v=WpRYxxFKkw0)
+[![Ver Video](https://emanual.robotis.com/docs/en/platform/turtlebot3/machine_learning/)](https://www.youtube.com/watch?v=WpRYxxFKkw0)
