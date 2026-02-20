@@ -337,6 +337,6 @@ ros2 topic echo /odom           # odometría del robot
 [![Ver Video](https://github.com/VerabelGonzales/dqn_navigation_ws/blob/main/models/results_20260219_180800/miniatura.jpg)](https://www.youtube.com/watch?v=WpRYxxFKkw0)
 
 
-### Test, velocidad x1 
+### Test, velocidad x1 (NO X5)
 
-[![Ver Video](https://github.com/VerabelGonzales/dqn_navigation_ws/blob/main/models/results_20260219_180800/miniatura.jpg)](https://www.youtube.com/watch?v=WpRYxxFKkw0)
+[![Ver Video](https://github.com/VerabelGonzales/dqn_navigation_ws/blob/main/models/results_20260219_180800/miniatura.jpg)](https://www.youtube.com/watch?v=cgK1zQAt3Ns)
