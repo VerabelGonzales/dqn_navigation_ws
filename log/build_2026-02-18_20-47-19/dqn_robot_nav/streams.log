@@ -1,0 +1,25 @@
+[2.007s] Invoking command in '/home/verabel/dqn_navigation_ws/src/dqn_robot_nav': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/verabel/dqn_navigation_ws/build/dqn_robot_nav/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/verabel/dqn_navigation_ws/install/dqn_robot_nav/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/dqn_robot_nav build --build-base /home/verabel/dqn_navigation_ws/build/dqn_robot_nav/build install --record /home/verabel/dqn_navigation_ws/build/dqn_robot_nav/install.log --single-version-externally-managed install_data
+[2.680s] running egg_info
+[2.731s] writing ../../build/dqn_robot_nav/dqn_robot_nav.egg-info/PKG-INFO
+[2.732s] writing dependency_links to ../../build/dqn_robot_nav/dqn_robot_nav.egg-info/dependency_links.txt
+[2.732s] writing entry points to ../../build/dqn_robot_nav/dqn_robot_nav.egg-info/entry_points.txt
+[2.732s] writing requirements to ../../build/dqn_robot_nav/dqn_robot_nav.egg-info/requires.txt
+[2.733s] writing top-level names to ../../build/dqn_robot_nav/dqn_robot_nav.egg-info/top_level.txt
+[2.842s] reading manifest file '../../build/dqn_robot_nav/dqn_robot_nav.egg-info/SOURCES.txt'
+[2.843s] writing manifest file '../../build/dqn_robot_nav/dqn_robot_nav.egg-info/SOURCES.txt'
+[2.843s] running build
+[2.843s] running build_py
+[2.843s] copying dqn_robot_nav/environment.py -> /home/verabel/dqn_navigation_ws/build/dqn_robot_nav/build/lib/dqn_robot_nav
+[2.844s] running install
+[2.858s] running install_lib
+[2.908s] copying /home/verabel/dqn_navigation_ws/build/dqn_robot_nav/build/lib/dqn_robot_nav/environment.py -> /home/verabel/dqn_navigation_ws/install/dqn_robot_nav/lib/python3.12/site-packages/dqn_robot_nav
+[2.909s] byte-compiling /home/verabel/dqn_navigation_ws/install/dqn_robot_nav/lib/python3.12/site-packages/dqn_robot_nav/environment.py to environment.cpython-312.pyc
+[2.914s] running install_data
+[2.914s] running install_egg_info
+[2.959s] removing '/home/verabel/dqn_navigation_ws/install/dqn_robot_nav/lib/python3.12/site-packages/dqn_robot_nav-0.0.0-py3.12.egg-info' (and everything under it)
+[2.959s] Copying ../../build/dqn_robot_nav/dqn_robot_nav.egg-info to /home/verabel/dqn_navigation_ws/install/dqn_robot_nav/lib/python3.12/site-packages/dqn_robot_nav-0.0.0-py3.12.egg-info
+[2.961s] running install_scripts
+[3.271s] Installing test_node script to /home/verabel/dqn_navigation_ws/install/dqn_robot_nav/lib/dqn_robot_nav
+[3.271s] Installing train_node script to /home/verabel/dqn_navigation_ws/install/dqn_robot_nav/lib/dqn_robot_nav
+[3.272s] writing list of installed files to '/home/verabel/dqn_navigation_ws/build/dqn_robot_nav/install.log'
+[3.369s] Invoked command in '/home/verabel/dqn_navigation_ws/src/dqn_robot_nav' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/verabel/dqn_navigation_ws/build/dqn_robot_nav/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/verabel/dqn_navigation_ws/install/dqn_robot_nav/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/dqn_robot_nav build --build-base /home/verabel/dqn_navigation_ws/build/dqn_robot_nav/build install --record /home/verabel/dqn_navigation_ws/build/dqn_robot_nav/install.log --single-version-externally-managed install_data

@@ -1,0 +1,2 @@
+Episode,Steps,Reward,Success,Collision,Timeout,Final_Distance,Min_Distance,Epsilon
+0,1,200.00,1,0,0,0.316,0.316,1.0000

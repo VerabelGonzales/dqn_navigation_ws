@@ -1,0 +1,3 @@
+[console_scripts]
+test_node = dqn_robot_nav.test_node:main
+train_node = dqn_robot_nav.train_node:main

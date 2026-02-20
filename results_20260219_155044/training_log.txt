@@ -1,0 +1,2 @@
+Episode,Steps,Reward,Outcome,Final_Distance,Min_Distance,Epsilon
+0,800,378.06,timeout,1.339,1.340,0.8903

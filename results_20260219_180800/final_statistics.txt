@@ -1,0 +1,16 @@
+=== TRAINING STATISTICS ===
+
+Total Episodes:          220
+Max Steps per Episode:   600
+
+Success Rate:   46.82%
+Collision Rate: 42.27%
+Timeout Rate:   10.91%
+
+Average Reward:         126.74
+Average Steps:          239.12
+Average Final Distance: 0.872m
+Average Min Distance:   0.794m
+
+Final Epsilon:          0.0501
+Total Replay Steps:     52544
