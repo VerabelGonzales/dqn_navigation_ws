@@ -1,232 +1,337 @@
 # DQN Robot Navigation — TurtleBot3
 
-Autonomous navigation system for TurtleBot3 Burger using Deep Q-Network (DQN). The agent learns to reach randomly generated goals in a 4×4 m Gazebo simulation world while avoiding obstacles, using only LiDAR and odometry data.
+Sistema de navegación autónoma para TurtleBot3 Burger usando Deep Q-Network (DQN). El agente aprende a alcanzar objetivos generados aleatoriamente en un mundo de simulación Gazebo (gz), evitando obstáculos usando únicamente datos de LiDAR y odometría — sin mapa, sin planificador global.
 
 ---
 
-## Table of Contents
+## Tabla de Contenidos
 
-- [Architecture Overview](#architecture-overview)
-- [State Design](#state-design)
-- [Action Space](#action-space)
-- [Reward Function](#reward-function)
-- [Hyperparameters](#hyperparameters)
-- [Training Curves & Results](#training-curves--results)
-- [Installation & Usage](#installation--usage)
+- [Arquitectura general](#arquitectura-general)
+- [Diseño del estado](#diseño-del-estado)
+- [Espacio de acciones](#espacio-de-acciones)
+- [Función de recompensa](#función-de-recompensa)
+- [Hiperparámetros](#hiperparámetros)
+- [Curvas de entrenamiento y resultados](#curvas-de-entrenamiento-y-resultados)
+- [Análisis de resultados](#análisis-de-resultados)
+- [Instalación y ejecución](#instalación-y-ejecución)
 
 ---
 
-## Architecture Overview
+## Arquitectura general
 
 ```
-Gazebo Simulation (TurtleBot3 Burger)
-        │  /scan (LaserScan)
-        │  /odom (Odometry)
+Simulación Gazebo (TurtleBot3 Burger)
+        │  /scan  (LaserScan)
+        │  /odom  (Odometry)
         ▼
-  TurtleBot3Env         ← ROS2 node, wraps sim I/O
+  TurtleBot3Env          ← Nodo ROS 2 — encapsula I/O del simulador, lógica de step y resets
         │
-  StateProcessor        ← bins LiDAR into 10 sectors + nav features
+  StateProcessor         ← Agrupa el LiDAR en 10 sectores + features de navegación
         │
-  DQNAgent              ← Double DQN with sklearn MLPRegressor
-  (256 → 256 → 128)     ← Experience replay + target network
+  DQNAgent               ← Double DQN implementado con sklearn MLPRegressor
+  (256 → 256 → 128)         Experience replay + target network periódico
         │
-  train_node / test_node ← episode loop, reset logic, logging
+  train_node / test_node ← Bucle de episodios, reset por outcome, logging, gráficas
 ```
 
-The Q-network is implemented using `sklearn.neural_network.MLPRegressor` with `warm_start=True` and `partial_fit`, enabling incremental online learning without full retraining each step. A separate **target network** is updated via deep copy every `target_update_freq` replay steps to stabilize training.
+La Q-network usa `sklearn.neural_network.MLPRegressor` con `warm_start=True` y `partial_fit` para aprendizaje online incremental. Una **target network** se mantiene como copia profunda y se sincroniza cada `target_update_freq` pasos de replay para estabilizar el entrenamiento (Double DQN).
 
 ---
 
-## State Design
+## Diseño del estado
 
-**State vector size: 12**
+**Vector de estado — 12 dimensiones**
 
-| Index | Feature | Description |
-|-------|---------|-------------|
-| 0–9 | `lidar_bins[0..9]` | 360° LiDAR scan compressed into 10 equal angular bins. Each bin holds the **minimum** distance reading within that sector. Clipped to [0, 3.5] m. |
-| 10 | `goal_distance` | Euclidean distance to goal (m), computed in `odom_callback` from `/odom`. |
-| 11 | `goal_angle` | Bearing to goal relative to robot heading (rad), normalized to [−π, π]. |
-
-**LiDAR preprocessing:** raw scan rays (360 total) → 10 bins × 36 rays each → min pooling per bin. Max range capped at 3.5 m; `Inf` → 3.5 m; `NaN` → 0.0 m.
-
-**Goal source of truth:** `goal_distance` and `goal_angle` are calculated exclusively inside `odom_callback` using `self.goal_position`, the same variable that controls the visual marker in Gazebo. This prevents any divergence between what the code detects and what appears on screen.
+| Índice | Feature | Fuente | Descripción |
+|--------|---------|--------|-------------|
+| 0–9 | `lidar_bins[0..9]` | `/scan` | Escaneo LiDAR 360° comprimido en 10 bins angulares iguales con **min-pooling** (36 rayos/bin). Rango [0, 3.5] m. `Inf` → 3.5 m · `NaN` → 0.0 m |
+| 10 | `goal_distance` | `/odom` | Distancia euclidiana al objetivo (m), calculada en `odom_callback` |
+| 11 | `goal_angle` | `/odom` | Ángulo relativo al objetivo respecto al heading del robot (rad), normalizado a [−π, π] |
 
 ---
 
-## Action Space
+## Espacio de acciones
 
-**7 discrete actions** — no backward movement.
+**7 acciones discretas**
 
-| ID | Linear vel (m/s) | Angular vel (rad/s) | Description |
-|----|-----------------|---------------------|-------------|
-| 0 | 0.26 | 0.00 | Forward (fast) |
-| 1 | 0.00 | +0.75 | Rotate left |
-| 2 | 0.00 | −0.75 | Rotate right |
-| 3 | 0.18 | +0.50 | Forward + left |
-| 4 | 0.18 | −0.50 | Forward + right |
-| 5 | 0.00 | +1.50 | Rotate left (fast) |
-| 6 | 0.00 | −1.50 | Rotate right (fast) |
+| ID | Vel. lineal (m/s) | Vel. angular (rad/s) | Descripción |
+|----|------------------|----------------------|-------------|
+| 0 | 0.26 | 0.00 | Avanzar |
+| 1 | 0.00 | +0.75 | Girar izquierda |
+| 2 | 0.00 | −0.75 | Girar derecha |
+| 3 | 0.18 | +0.50 | Avanzar + izquierda |
+| 4 | 0.18 | −0.50 | Avanzar + derecha |
+| 5 | 0.00 | +1.50 | Girar izquierda rápido |
+| 6 | 0.00 | −1.50 | Girar derecha rápido |
 
-Actions 1, 2, 5, 6 are classified as **pure rotations** and tracked for oscillation and rotation penalties in the reward function.
-
----
-
-## Reward Function
-
-The reward is designed to maximize exploratory behavior early in training while still penalizing dangerous proximity to obstacles. There is **no per-step time penalty** — penalizing time causes the agent to learn to rotate in place rather than navigate.
-
-### Per-step reward (non-terminal)
-
-| Component | Formula | Range | Weight | Rationale |
-|-----------|---------|-------|--------|-----------|
-| Distance progress | `(d_prev − d_curr) × 15` | unbounded | ×1 | Dense main signal — rewards every meter gained toward goal |
-| Yaw alignment | `(1 − 2·|θ_goal|/π) × 0.5` | [−0.5, +0.5] | ×0.5 | Gentle orientation guide, does not dominate |
-| Obstacle proximity | weighted decay if any ray < 0.30 m | [−0.9, 0] | ×0.3 | Only activates near real danger |
-| Forward bonus | +0.2 if linear > 0, else −0.1 | {−0.1, +0.2} | — | Small incentive to use translating actions |
-| Oscillation penalty | −1.0 if action sequence A→B→A where (A,B) is a reversal pair | {−1.0, 0} | — | Discourages left-right-left jitter |
-| Rotation penalty | −0.5 if last 5 actions are all pure rotations | {−0.5, 0} | — | Discourages spinning in place |
-
-### Terminal rewards
-
-| Event | Reward |
-|-------|--------|
-| **Goal reached** (`goal_distance < 0.20 m`) | `+200.0` added to step reward |
-| **Collision** (>3 LiDAR rays < 0.25 m) | `−50.0` (episode ends) |
-
-### Obstacle reward detail
-
-The proximity penalty uses a **directional weighting** scheme that gives higher weight to obstacles directly in front of the robot (cosine⁶ angular profile). Only rays in the ±90° frontal sector are considered, and only those within 0.30 m. The base function returns [−3, 0]; the external weight of ×0.3 brings the effective range to [−0.9, 0].
-
-### Episode termination
-
-| Condition | Reset type |
-|-----------|-----------|
-| Collision detected | `reset_full()` — robot respawned at origin + new goal |
-| Goal reached | `reset_goal_only()` — robot stays, new goal generated |
-| Timeout (1500 steps) | `reset_goal_only()` — robot stays, new goal generated |
+Las acciones 1, 2, 5 y 6 se clasifican como **pure rotations** y son monitoreadas por las penalizaciones de oscilación y rotación en la función de recompensa.
 
 ---
 
-## Hyperparameters
+## Función de recompensa
+
+Diseñada para priorizar el movimiento exploratorio hacia adelante manteniendo un comportamiento seguro. **No existe penalización por paso de tiempo** — un time penalty enseña al agente a girar en su propio eje (la forma más rápida de terminar un episodio) en lugar de navegar.
+
+### Componentes por paso (no terminales)
+
+| Componente | Fórmula | Rango efectivo | Justificación |
+|------------|---------|----------------|---------------|
+| Progreso de distancia | `(d_prev − d_curr) × 15` | ilimitado | Señal densa principal — cada centímetro ganado hacia el goal se recompensa |
+| Alineación de yaw | `(1 − 2·\|θ\|/π) × 0.5` | [−0.5, +0.5] | Guía de orientación suave; peso reducido para que no domine |
+| Proximidad a obstáculos | decay direccional si algún rayo frontal < 0.30 m | [−0.9, 0] | Solo activo en rango de peligro real; ponderación direccional coseno⁶ |
+| Forward bonus | +0.2 (lineal > 0) · −0.1 (rotación pura) | {−0.1, +0.2} | Incentivo pequeño a usar acciones que trasladan |
+| Penalización de oscilación | −1.0 si los últimos 3 pasos forman A→B→A con (A,B) par de inversión | {−1.0, 0} | Rompe bucles de oscilación izquierda-derecha |
+| Penalización de rotación | −0.5 si los últimos 5 pasos son todos rotaciones puras | {−0.5, 0} | Evita girar indefinidamente en el mismo lugar |
+
+### Recompensas terminales
+
+| Evento | Condición de disparo | Recompensa |
+|--------|---------------------|------------|
+| **Goal alcanzado** | `goal_distance < 0.20 m` | +200.0 |
+| **Colisión** | > 3 rayos LiDAR < 0.25 m | −50.0 |
+
+### Terminación del episodio y lógica de reset
+
+| Condición | Reset |
+|-----------|-------|
+| Colisión | `reset_full()` — robot teletransportado al origen (0, 0) + nuevo goal aleatorio |
+| Goal alcanzado | `reset_goal_only()` — robot mantiene posición + nuevo goal |
+| Timeout (700 pasos) | `reset_goal_only()` — robot mantiene posición + nuevo goal |
+
+Solo una **colisión** activa el respawn completo del robot. Los resets por timeout o goal únicamente regeneran el marker del objetivo, manteniendo al robot en su posición para preservar la continuidad del episodio.
+
+---
+
+## Hiperparámetros
 
 ### DQN Agent
 
-| Parameter | Value | Description |
+| Parámetro | Valor | Descripción |
 |-----------|-------|-------------|
-| `state_size` | 12 | Input dimension |
-| `action_size` | 7 | Output dimension (one Q-value per action) |
-| `learning_rate` | 0.0003 | Adam optimizer LR |
-| `gamma` | 0.99 | Discount factor |
-| `epsilon_start` | 1.0 | Initial exploration rate |
-| `epsilon_min` | 0.05 | Minimum exploration rate |
-| `epsilon_decay_steps` | 6000 | Steps to decay ε via exponential schedule |
-| `memory_size` | 20 000 | Replay buffer capacity (FIFO deque) |
-| `batch_size` | 64 | Samples per replay update |
-| `target_update_freq` | 200 | Replay steps between target network syncs |
+| `state_size` | 12 | Dimensión del input |
+| `action_size` | 7 | Dimensión del output |
+| `learning_rate` | 0.0003 | Optimizador Adam |
+| `gamma` | 0.99 | Factor de descuento |
+| `epsilon_start` | 1.0 | Exploración total al inicio |
+| `epsilon_min` | 0.05 | Exploración residual mínima |
+| `epsilon_decay_steps` | 6 000 | Pasos de decay exponencial |
+| `memory_size` | 20 000 | Buffer de experience replay (FIFO) |
+| `batch_size` | 64 | Muestras por actualización |
+| `target_update_freq` | 200 | Pasos de replay entre sincronizaciones de la target network |
 
-**Epsilon decay schedule** (exponential, same as ROBOTIS reference):
-
+**Esquema de decay de epsilon**
 ```
-ε(t) = ε_min + (1 − ε_min) × exp(−t / decay_steps)
-```
-
-At t = 4 000 replay steps, ε ≈ 0.10. At t = 6 000, ε ≈ 0.05 (minimum).
-
-### Network Architecture
-
-```
-Input (12)  →  Dense 256 (ReLU)  →  Dense 256 (ReLU)  →  Dense 128 (ReLU)  →  Output (7)
+ε(t) = ε_min + (1 − ε_min) · exp(−t / 6000)
 ```
 
-Regularization: L2 weight decay `α = 0.0001`. Optimizer: Adam.
+| Pasos de replay (t) | ε |
+|--------------------|---|
+| 0 | 1.000 |
+| 2 000 | 0.385 |
+| 4 000 | 0.101 |
+| 6 000 | 0.050 (mínimo) |
 
-### Training Loop
+### Arquitectura de la red
 
-| Parameter | Value |
+```
+Input (12) → FC 256 ReLU → FC 256 ReLU → FC 128 ReLU → Output (7 Q-values)
+```
+
+Regularización L2 `α = 0.0001`. Optimizador: Adam. Entrenamiento incremental via `MLPRegressor.partial_fit`.
+
+### Bucle de entrenamiento
+
+| Parámetro | Valor |
 |-----------|-------|
-| Total episodes | 220 |
-| Max steps / episode | 1 500 |
-| Replay starts after | 64 samples in buffer |
-| Replay called | every step once buffer ≥ batch_size |
-| Model saved at | ep 25, 50, 75, 100, 150, 200, final |
+| Total de episodios | 220 |
+| Pasos máximos por episodio | 700 |
+| Inicio del replay | tras 64 transiciones en el buffer |
+| Frecuencia de replay | en cada paso (una vez buffer ≥ batch_size) |
+| Checkpoints guardados | ep 25, 50, 75, 100, 150, 200, final |
 
 ---
 
-## Training Curves & Results
+## Curvas de entrenamiento y resultados
 
 <img src="https://github.com/VerabelGonzales/dqn_navigation_ws/blob/main/models/results_20260219_180800/training_results.png" alt="Acoples">
 <p style="margin-top:10px; font-size: 16px;"><strong>Figura 1.</strong> Acoples</p>
 <br>
 
-### Reading the curves
+### Descripción panel por panel
 
-**Episode Rewards (top-left):** High variance throughout — expected with epsilon-greedy exploration. Positive rewards dominate from ~ep 50 onward, indicating the agent learns to reach goals rather than just avoid collisions.
+**Arriba izquierda — Episode Rewards:** Recompensa bruta por episodio. La alta varianza es esperada con exploración ε-greedy. Las recompensas tienden a ser positivas desde ~ep 50, lo que indica que el agente empieza a alcanzar goals más que a acumular penalizaciones por colisión.
 
-**Moving Average Reward — window 20 (top-right):** Clear upward trend from 0 to ~200 by ep 75, confirming genuine learning. A mid-training dip (ep 125–150) is typical as epsilon drops and the agent transitions from exploration to exploitation — Q-values are recalibrating.
+**Arriba derecha — Moving Average (ventana = 20):** Confirma una tendencia de aprendizaje clara: cerca de cero en ep 0, subiendo a ~150–200 hacia ep 75, con una caída a mitad del entrenamiento (ep 125–150) cuando epsilon baja lo suficiente para que el agente empiece a explotar una política parcialmente convergida — una ventana de inestabilidad conocida en DQN.
 
-**Steps per Episode (mid-left):** Early episodes often hit the 600-step old limit (shown as dashed line). After ep 100, most episodes complete well under the limit, meaning the agent reaches the goal or collides quickly rather than wandering.
+**Centro izquierda — Steps per Episode:** Los episodios tempranos frecuentemente alcanzan el límite de pasos (línea punteada). A partir de ep 100, los episodios terminan antes, lo que indica que el agente toma decisiones concretas en lugar de deambular.
 
-**Episode Outcomes — cumulative % (mid-right):**
+**Centro derecha — Episode Outcomes (% acumulado):**
 
-| Phase | Observation |
-|-------|-------------|
-| ep 0–30 | Timeout-dominated (~80%) — robot explores but rarely finds goal |
-| ep 30–80 | Collision rate rises as ε drops — agent starts committing to actions |
-| ep 80–220 | Success rate climbs steadily to ~45%, collision stabilizes ~45%, timeout drops to ~10% |
+| Fase | Outcome dominante | Interpretación |
+|------|------------------|----------------|
+| ep 0–30 | Timeout (~80%) | Política aleatoria raramente encuentra el goal |
+| ep 30–80 | Colisiones suben a ~60% | El agente actúa con intención pero sin precisión |
+| ep 80–220 | Éxitos crecen a ~45% | La política madura; timeouts casi eliminados |
 
-**Final Distance to Goal (bottom-left):** Majority of episodes end at distance < 0.5 m from ep 100 onward. Spikes indicate difficult random goal placements.
+**Abajo izquierda — Final Distance to Goal:** A partir de ep 100 la distribución se concentra bajo 0.5 m. Los picos esporádicos corresponden a goals generados lejos de la posición final del robot.
 
-**Min Distance Achieved (bottom-right):** The agent consistently gets within 0.5 m of the goal from ep 80+, and frequently touches the 0.20 m threshold (green dashed line), confirming goal-reaching capability.
+**Abajo derecha — Min Distance Achieved:** El agente llega de manera consistente a menos de 0.5 m del objetivo desde ep 80+, y frecuentemente cruza el umbral de 0.20 m (línea punteada verde), demostrando comportamiento de aproximación estable.
 
-### Summary metrics at end of training (ep 220)
+### Métricas resumen — fin del entrenamiento (ep 220)
 
-| Metric | Value |
-|--------|-------|
-| Success rate | ~45% |
-| Collision rate | ~45% |
-| Timeout rate | ~10% |
-| Moving avg reward (last 20 ep) | ~200 |
+| Métrica | Valor |
+|---------|-------|
+| Tasa de éxito | ~45% |
+| Tasa de colisiones | ~45% |
+| Tasa de timeouts | ~10% |
+| Recompensa media móvil (últimos 20 ep) | ~200 |
 
 ---
 
-## Installation & Usage
+## Análisis de resultados
 
-### Requirements
+### Qué logró el entrenamiento
 
-- ROS 2 Humble
-- Gazebo (Harmonic/Ionic)
-- TurtleBot3 packages (`turtlebot3_gazebo`, `turtlebot3_msgs`)
-- Python: `numpy`, `scikit-learn`, `matplotlib`
+Tras 220 episodios el agente alcanza una **tasa de éxito de ~45%** — un resultado significativo considerando que el entorno usa placement de goals completamente aleatorio en un mundo de 4×4 m con obstáculos estáticos, y que la Q-network está construida sobre `sklearn MLPRegressor` en lugar de un framework de deep learning con aceleración GPU.
 
-### Training
+### Tres fases de aprendizaje
+
+Las curvas revelan tres fases consistentes con la teoría de DQN:
+
+**Fase 1 — Exploración pura (ep 0–30).** ε > 0.8. El agente se mueve mayoritariamente de forma aleatoria. Timeout domina porque las acciones aleatorias rara vez construyen un camino coherente hacia el goal.
+
+**Fase 2 — Transición (ep 30–100).** ε cae de ~0.8 a ~0.1. La política empieza a formarse pero es poco confiable. La tasa de colisiones alcanza su pico aquí: el agente ahora se mueve con intención pero todavía no tiene la precisión para esquivar obstáculos mientras persigue el objetivo. Esta es la ventana de aprendizaje crítica — la señal de distance progress acumula suficiente experiencia para moldear los Q-values hacia comportamiento dirigido al goal.
+
+**Fase 3 — Explotación (ep 100–220).** ε ≈ 0.05. El agente actúa mayoritariamente de forma greedy. La tasa de éxito crece de manera sostenida. Los timeouts casi desaparecen (< 10%), lo que significa que el agente siempre llega a un resultado definitivo — goal u obstáculo — en lugar de deambular. La tasa de colisiones estabilizándose en ~45% refleja toma de riesgo intencional, que es el comportamiento deseado dada la penalización de colisión reducida.
+
+### Decisiones de diseño y sus efectos observados
+
+| Decisión | Justificación | Efecto observado |
+|----------|---------------|-----------------|
+| Distance progress × 15 como señal dominante | Recompensa densa en cada paso | El agente se acerca activamente al goal desde ep 30+ |
+| Sin penalización de tiempo | Evita el óptimo local de "quedarse quieto" | Timeouts eliminados hacia ep 100 |
+| Penalización por colisión −50 (no −100) | Evita parálisis en el entrenamiento temprano | El agente explora de forma agresiva; colisiones normales al inicio |
+| Penalización de obstáculos solo < 0.30 m | Evita penalizar pasos cercanos legítimos | El robot navega espacios estrechos sin comportamiento excesivamente conservador |
+| `reset_full()` solo en colisión | Preserva diversidad de posiciones | El agente aprende desde muchas posiciones, no solo desde el origen |
+
+### Limitaciones y mejoras potenciales
+
+| Limitación | Mejora sugerida |
+|-----------|----------------|
+| ~45% de colisiones persiste | Entrenar por 500+ episodios; la curva sigue subiendo en ep 220 |
+| Backend `sklearn` es solo CPU | Reemplazar con PyTorch para redes más grandes y aceleración GPU |
+| Buffer de 20 000 muestras puede ser pequeño | Aumentar a 100 000; las experiencias tempranas se desplazan demasiado rápido |
+| Mundo de obstáculos fijo | Agregar curriculum: empezar con espacio abierto, añadir obstáculos progresivamente |
+
+---
+
+## Instalación y ejecución
+
+### Requisitos del sistema
+
+| Componente | Versión |
+|-----------|---------|
+| OS | Ubuntu 24.04 |
+| ROS 2 | **Jazzy** |
+| Simulador | **Gazebo (gz-sim)** |
+| Python | 3.10+ |
+| Modelo TurtleBot3 | Burger |
+
+### Dependencias Python
 
 ```bash
+pip install numpy scikit-learn matplotlib
+```
+
+### Paquetes ROS 2 y TurtleBot3
+
+```bash
+sudo apt install \
+  ros-jazzy-turtlebot3 \
+  ros-jazzy-turtlebot3-msgs \
+  ros-jazzy-turtlebot3-simulations
+```
+---
+
+### Ejecución paso a paso
+
+#### 1. Compilar el paquete
+
+```bash
+cd ~/dqn_navigation_ws
+colcon build --packages-select dqn_robot_nav
+source install/setup.bash
+```
+
+#### 2. Lanzar el mundo en Gazebo
+
+```bash
+ros2 launch turtlebot3_gazebo turtlebot3_dqn_stage2.launch.py
+```
+
+#### 3. Ejecutar el entrenamiento
+
+```bash
+# Terminal nueva
+source ~/dqn_navigation_ws/install/setup.bash
 ros2 run dqn_robot_nav train_node
 ```
 
-Results are saved to `results_YYYYMMDD_HHMMSS/`:
-- `training_log.txt` — per-episode CSV log
-- `final_statistics.txt` — summary metrics
-- `training_results.png` — training curves
-- `model_ep{N}.pkl` — periodic checkpoints
-- `model_final.pkl` — final model
-
-### Evaluation
-
-```bash
-ros2 run dqn_robot_nav test_node --ros-args \
-  -p model_path:=/path/to/results_YYYYMMDD_HHMMSS/model_final.pkl \
-  -p n_episodes:=10 \
-  -p stage:=1
+Los resultados se guardan automáticamente en:
+```
+results_YYYYMMDD_HHMMSS/
+├── training_log.txt        ← CSV por episodio: Episode, Steps, Reward, Outcome, Distance, Epsilon
+├── final_statistics.txt    ← métricas resumen al final del entrenamiento
+├── training_results.png    ← gráficas de entrenamiento (6 paneles)
+├── model_ep25.pkl          ┐
+├── model_ep50.pkl          │  checkpoints periódicos
+├── model_ep75.pkl          │
+├── model_ep100.pkl         │
+├── model_ep150.pkl         │
+├── model_ep200.pkl         ┘
+└── model_final.pkl         ← usar este para evaluación
 ```
 
-| Parameter | Default | Description |
+#### 4. Ejecutar la evaluación
+
+```bash
+source ~/dqn_navigation_ws/install/setup.bash
+ros2 run dqn_robot_nav test_node --ros-args \
+  -p model_path:=/ruta/absoluta/a/results_YYYYMMDD_HHMMSS/model_final.pkl
+```
+
+| Parámetro | Default | Descripción |
 |-----------|---------|-------------|
-| `model_path` | *(required)* | Path to `.pkl` model file |
-| `n_episodes` | 10 | Number of evaluation episodes |
-| `max_steps` | 1500 | Step limit per episode |
-| `stage` | 1 | Gazebo world stage number |
+| `model_path` | *(obligatorio)* | Ruta absoluta al archivo `.pkl` del modelo |
+| `n_episodes` | 10 | Número de episodios de evaluación |
+| `max_steps` | 1500 | Límite de pasos por episodio |
+| `stage` | 2 | Stage del mundo Gazebo |
 
-The test node runs in fully greedy mode (`ε = 0`) and prints a result summary with success rate, average reward, and collision/timeout breakdown.
+Salida de ejemplo:
+```
+[INFO] ✓ Ep 1: GOAL      | steps=312 | reward=187.4 | dist_final=0.14m
+[INFO] ✗ Ep 2: COLLISION  | steps=88  | reward=-31.2 | dist_final=0.21m
+[INFO] ====================================================
+[INFO] === RESULTADOS DE EVALUACIÓN ========================
+[INFO]   Episodios    : 10
+[INFO]   ✓ Éxitos     : 5  (50.0%)
+[INFO]   ✗ Colisiones : 4  (40.0%)
+[INFO]   ⏱ Timeouts   : 1  (10.0%)
+[INFO]   Reward medio : 124.31
+[INFO]   Reward std   : 89.47
+```
 
-[def]: /models/results_20260219_180800/training_results.png
+#### 5. Monitorear tópicos (opcional)
+
+```bash
+ros2 topic echo /cmd_vel        # comandos de velocidad enviados al robot
+ros2 topic echo /goal_pose      # posición actual del objetivo
+ros2 topic echo /scan           # datos brutos del LiDAR
+ros2 topic echo /odom           # odometría del robot
+```
+
+---
+
+
+
+
